@@ -38,7 +38,8 @@ dependencies = [
   "pkce>=1.0.0",
   "python_jwt>=3.3.2",
   "requests>=2.27.1",
-  "six>=1.16.0"
+  "six>=1.16.0",
+  "sseclient>=0.0.27"
 ]
 
   [[project.authors]]

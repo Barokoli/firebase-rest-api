@@ -48,6 +48,8 @@ class Stream:
 		for msg in self.sse:
 			if msg:
 				msg_data = json.loads(msg.data)
+				if msg_data is None:
+					break  # stream closed
 				msg_data["event"] = msg.event
 
 				if self.stream_id:
