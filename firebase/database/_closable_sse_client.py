@@ -16,7 +16,7 @@ class ClosableSSEClient(SSEClient):
 		self.build_headers = build_headers
 		self.should_connect = True
 
-		super(ClosableSSEClient, self).__init__(*args, **kwargs)
+		super(ClosableSSEClient, self).__init__(*args, **kwargs, chunk_size=1)
 
 	def _connect(self):
 		if self.should_connect:

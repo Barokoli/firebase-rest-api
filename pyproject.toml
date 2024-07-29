@@ -39,7 +39,7 @@ dependencies = [
   "python_jwt>=3.3.2",
   "requests>=2.27.1",
   "six>=1.16.0",
-  "sseclient>=0.0.27"
+  "requests-sse>=0.3.2"
 ]
 
   [[project.authors]]

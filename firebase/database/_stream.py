@@ -10,7 +10,7 @@ import time
 import threading
 
 from ._keep_auth_session import KeepAuthSession
-from ._closable_sse_client import ClosableSSEClient
+from requests_sse import EventSource
 
 
 class Stream:
@@ -43,25 +43,36 @@ class Stream:
 		return self
 
 	def start_stream(self):
-		self.sse = ClosableSSEClient(self.url, session=self.make_session(), build_headers=self.build_headers)
-
-		for msg in self.sse:
-			if msg:
+		with EventSource(self.url, session=self.make_session(), headers=self.build_headers()) as self.sse:
+			for msg in self.sse:
+				print(f"Stream Receive: \n{msg.origin}[{msg.type}]:\n{msg.data}")
 				msg_data = json.loads(msg.data)
-				if msg_data is None:
-					break  # stream closed
-				msg_data["event"] = msg.event
+				if msg_data is not None:
+					msg_data["event"] = msg.type
+					if self.stream_id:
+						msg_data["stream_id"] = self.stream_id
+					self.stream_handler(msg_data)
 
-				if self.stream_id:
-					msg_data["stream_id"] = self.stream_id
-
-				self.stream_handler(msg_data)
+		# self.sse = ClosableSSEClient(self.url, session=self.make_session(), build_headers=self.build_headers)
+		#
+		# for msg in self.sse:
+		# 	if msg:
+		# 		msg_data = json.loads(msg.data)
+		# 		if msg_data is None:
+		# 			print("Stream Closed!")
+		# 			break  # stream closed
+		# 		msg_data["event"] = msg.event
+		#
+		# 		if self.stream_id:
+		# 			msg_data["stream_id"] = self.stream_id
+		#
+		# 		self.stream_handler(msg_data)
 
 	def close(self):
-		while not self.sse and not hasattr(self.sse, 'resp'):
-			time.sleep(0.001)
+		# while not self.sse and not hasattr(self.sse, 'resp'):
+		# 	time.sleep(0.001)
 
-		self.sse.running = False
+		# self.sse.running = False
 		self.sse.close()
 		self.thread.join()
 
