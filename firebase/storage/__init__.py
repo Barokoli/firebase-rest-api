@@ -16,6 +16,7 @@ import datetime
 from google.cloud import storage
 from urllib.parse import quote
 
+from firebase import Auth
 from firebase._exception import raise_detailed_error
 
 
@@ -34,18 +35,19 @@ class Storage:
 		configuration.
 	"""
 
-	def __init__(self, credentials, requests, storage_bucket):
+	def __init__(self, auth: Auth, requests, storage_bucket):
 		""" Constructor """
 
-		self.credentials = credentials
+		self.credentials = None
+		self.auth = auth
 		self.requests = requests
 		self.storage_bucket = "https://firebasestorage.googleapis.com/v0/b/" + storage_bucket
 
 		self.path = ""
 
-		if credentials:
-			client = storage.Client(credentials=credentials, project=storage_bucket)
-			self.bucket = client.get_bucket(storage_bucket)
+		# if credentials:
+		# 	client = storage.Client(credentials=credentials, project=storage_bucket)
+		# 	self.bucket = client.get_bucket(storage_bucket)
 
 	def child(self, *args):
 		""" Build paths to your storage.
@@ -108,6 +110,8 @@ class Storage:
 
 		request_ref = self.storage_bucket + "/o?name={0}".format(path)
 
+		token = token or self.auth.user['idToken']
+
 		if token:
 			headers = {"Authorization": "Firebase " + token}
 			request_object = self.requests.post(request_ref, headers=headers, data=file_object)
@@ -158,6 +162,8 @@ class Storage:
 		if path.startswith('/'):
 			path = path[1:]
 
+		token = token or self.auth.user['idToken']
+
 		if self.credentials:
 			self.bucket.delete_blob(path)
 		else:
@@ -192,6 +198,8 @@ class Storage:
 		:param token: (Optional) Firebase Auth User ID Token, defaults 
 			to :data:`None`.
 		"""
+
+		token = token or self.auth.user['idToken']
 
 		if self.credentials:
 
@@ -248,6 +256,8 @@ class Storage:
 		# remove leading backlash
 		if path.startswith('/'):
 			path = path[1:]
+
+		token = token or self.auth.user['idToken']
 
 		if self.credentials:
 			blob = self.bucket.get_blob(path)

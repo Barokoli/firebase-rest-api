@@ -69,7 +69,7 @@ class Firebase:
 
 		return Auth(self.api_key, self.credentials, self.requests, client_secret=client_secret)
 
-	def database(self):
+	def database(self, auth: Auth = None):
 		"""Initializes and returns a new Firebase Realtime Database
 		instance.
 
@@ -77,7 +77,7 @@ class Firebase:
 		:rtype: Database
 		"""
 
-		return Database(self.credentials, self.database_url, self.requests)
+		return Database(auth, self.database_url, self.requests)
 
 	def firestore(self):
 		"""Initializes and returns a new Firebase Cloud Firestore
@@ -89,11 +89,11 @@ class Firebase:
 
 		return Firestore(self.api_key, self.credentials, self.project_id, self.requests)
 
-	def storage(self):
+	def storage(self, auth: Auth = None):
 		"""Initializes and returns a new Firebase Storage instance.
 
 		:return: A newly initialized instance of Storage.
 		:rtype: Storage
 		"""
 
-		return Storage(self.credentials, self.requests, self.storage_bucket)
+		return Storage(auth, self.requests, self.storage_bucket)

@@ -6,6 +6,7 @@
 
 
 import socket
+import time
 
 from ._custom_sse_client import SSEClient
 
@@ -26,5 +27,16 @@ class ClosableSSEClient(SSEClient):
 		self.should_connect = False
 		self.retry = 0
 
-		self.resp.raw._fp.fp.raw._sock.shutdown(socket.SHUT_RDWR)
-		self.resp.raw._fp.fp.raw._sock.close()
+		for r in range(0, 8):
+			if self.resp is not None:
+				break
+			time.sleep(0.2)
+
+		if self.resp is None:
+			return
+
+		# if hasattr(self.resp.raw, '_fp'):
+		# 	self.resp.raw._fp.fp.raw._sock.shutdown(socket.SHUT_RDWR)
+		# 	self.resp.raw._fp.fp.raw._sock.close()
+		# else:
+		self.resp.close()

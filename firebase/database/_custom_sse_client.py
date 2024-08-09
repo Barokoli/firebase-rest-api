@@ -1,4 +1,4 @@
-
+import json
 #   Copyright (c) 2022 Asif Arman Rahman
 #   Licensed under MIT (https://github.com/AsifArmanRahman/firebase/blob/main/LICENSE)
 
@@ -10,6 +10,10 @@ import six
 import time
 import requests
 import warnings
+import logging
+
+
+logger = logging.getLogger("Firebase")
 
 
 # Technically, we should support streams that mix line endings.  This regex,
@@ -54,6 +58,7 @@ class SSEClient(object):
 			self.requests_kwargs['headers']['Last-Event-ID'] = self.last_id
 
 		headers = self.build_headers()
+		logger.info(f"Starting Stream with {json.dumps(headers)}")
 		self.requests_kwargs['headers'].update(headers)
 
 		# Use session if set.  Otherwise, fall back to `requests` module.

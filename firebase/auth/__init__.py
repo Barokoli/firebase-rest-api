@@ -14,6 +14,10 @@ A simple python wrapper for Google's
 
 import json
 import math
+import threading
+import logging
+import os
+
 import pkce
 import random
 import datetime
@@ -25,6 +29,9 @@ from google.auth.transport.requests import Request
 from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat
 
 from firebase._exception import raise_detailed_error
+
+
+logger = logging.getLogger("Firebase")
 
 
 class Auth:
@@ -56,9 +63,53 @@ class Auth:
 		self.session_id = None
 		self.__code_verifier = None
 		self.__nonce = None
+		self.user = {'idToken': None}
+
+		self.before_refresh_cbs = []
+		self.after_refresh_cbs = []
+		self.pid = os.getpid()
 
 		if client_secret:
 			self.client_secret = _load_client_secret(client_secret)
+
+	def call_watchdog(self):
+		while self.stop_watchdog is not None and not self.stop_watchdog.is_set():
+			if 'expiresAt' in self.user:
+				debug_off = 0  # (60 * 55)
+				expires_in = self.user['expiresAt'] - datetime.datetime.today().timestamp() - debug_off
+				logger.info(f"Client ({self.pid}) token expires in {(expires_in / 60)}min")
+				if expires_in - (60 * 15) < 0:  # expires in the next 15min
+					old = self.user['idToken']
+					for cb in self.before_refresh_cbs:
+						try:
+							cb()
+						except Exception as e:
+							logger.exception(e)
+
+					self.user = self.refresh(self.user['refreshToken'])
+					for cb in self.after_refresh_cbs:
+						try:
+							cb()
+						except Exception as e:
+							logger.exception(e)
+					logger.info(f"Refreshed Token ({self.pid}). {old} -> {self.user['idToken']}")
+					expires_in = self.user['expiresAt'] - datetime.datetime.today().timestamp() - debug_off
+				wait_for = max(expires_in - (60 * 10), 60)
+				logger.info(f"Checking again in {(wait_for / 60)}min")
+				self.stop_watchdog.wait(timeout=wait_for)
+			else:
+				raise Exception("User not logged in!")
+
+	def __enter__(self):
+		self.stop_watchdog = threading.Event()
+		self.watchdog = threading.Thread(target=self.call_watchdog, daemon=True)
+		self.watchdog.start()
+		return self
+
+	def __exit__(self, exc_type, exc_val, exc_tb):
+		self.stop_watchdog.set()
+		self.watchdog.join(timeout=1)
+		return True
 
 	def authenticate_login_with_google(self):
 		""" Redirect the user to Google's OAuth 2.0 server to initiate 
@@ -158,7 +209,8 @@ class Auth:
 
 		raise_detailed_error(request_object)
 
-		return _token_expire_time(request_object.json())
+		self.user = _token_expire_time(request_object.json())
+		return self.user
 
 	def sign_in_anonymous(self):
 		""" Sign In Anonymously.
@@ -180,7 +232,8 @@ class Auth:
 
 		raise_detailed_error(request_object)
 
-		return _token_expire_time(request_object.json())
+		self.user = _token_expire_time(request_object.json())
+		return self.user
 
 	def create_custom_token(self, uid, additional_claims=None, expiry_minutes=60):
 		""" Create a Firebase Auth custom token.
@@ -249,7 +302,8 @@ class Auth:
 
 		raise_detailed_error(request_object)
 
-		return _token_expire_time(request_object.json())
+		self.user = _token_expire_time(request_object.json())
+		return self.user
 
 	def refresh(self, refresh_token):
 		""" Refresh a Firebase ID token.
@@ -283,7 +337,8 @@ class Auth:
 			"expiresIn": request_object_json["expires_in"]
 		}
 
-		return _token_expire_time(user)
+		self.user = _token_expire_time(user)
+		return self.user
 
 	def get_account_info(self, id_token):
 		""" Fetch user's stored account information.
@@ -481,7 +536,8 @@ class Auth:
 
 		raise_detailed_error(request_object)
 
-		return _token_expire_time(request_object.json())
+		self.user = _token_expire_time(request_object.json())
+		return self.user
 
 	def _token_from_auth_url(self, url):
 		""" Fetch tokens using the authorization code from given URL.
