@@ -13,11 +13,16 @@ A simple python wrapper for Google's `Firebase Cloud Storage REST API`_
 """
 
 import datetime
+
+import requests.exceptions
 from google.cloud import storage
 from urllib.parse import quote
 
 from firebase import Auth
 from firebase._exception import raise_detailed_error
+import logging
+
+logger = logging.getLogger("Firebase")
 
 
 class Storage:
@@ -216,14 +221,19 @@ class Storage:
 				blob.download_to_filename(filename)
 
 		elif token:
-			headers = {"Authorization": "Firebase " + token}
-			r = self.requests.get(self.get_url(token), stream=True, headers=headers)
+			for r in range(0, 10):
+				try:
+					headers = {"Authorization": "Firebase " + token}
+					r = self.requests.get(self.get_url(token), stream=True, headers=headers)
 
-			if r.status_code == 200:
-				with open(filename, 'wb') as f:
-					for chunk in r:
-						f.write(chunk)
-
+					if r.status_code == 200:
+						with open(filename, 'wb') as f:
+							for chunk in r:
+								f.write(chunk)
+				except (requests.exceptions.ChunkedEncodingError, requests.exceptions.Timeout) as e:
+					logger.info(f"Failed download ({e}). Retrying {r}")
+					continue
+				break
 		else:
 			r = self.requests.get(self.get_url(token), stream=True)
 
