@@ -15,8 +15,11 @@ A simple python wrapper for Google's `Firebase Database REST API`_
 import math
 import json
 import time
+from functools import partial
 from random import randrange
 from urllib.parse import urlencode
+
+from firebase import Auth
 from google.auth.transport.requests import Request
 
 from ._stream import Stream
@@ -39,7 +42,7 @@ class Database:
 	:param requests: Session to make HTTP requests.
 	"""
 
-	def __init__(self, credentials, database_url, requests):
+	def __init__(self, auth: Auth, database_url, requests):
 		""" Constructor """
 
 		if not database_url.endswith('/'):
@@ -47,7 +50,7 @@ class Database:
 		else:
 			url = database_url
 
-		self.credentials = credentials
+		self.auth = auth
 		self.database_url = url
 		self.requests = requests
 
@@ -55,6 +58,7 @@ class Database:
 		self.build_query = {}
 		self.last_push_time = 0
 		self.last_rand_chars = []
+		self.credentials = None
 
 	def order_by_key(self):
 		""" Filter data by their keys.
@@ -287,7 +291,7 @@ class Database:
 
 		return self
 
-	def build_request_url(self, token):
+	def build_request_url(self, token=None, override_path=None, override_db_url=None):
 		""" Builds Request URL for query.
 
 
@@ -299,10 +303,15 @@ class Database:
 		:rtype: str
 		"""
 
+		path = override_path or self.path
+		database_url = override_db_url or self.database_url
+
 		parameters = {}
 
 		if token:
 			parameters['auth'] = token
+		elif self.auth:
+			parameters['auth'] = self.auth.user['idToken']
 
 		for param in list(self.build_query):
 			if type(self.build_query[param]) is str:
@@ -315,7 +324,7 @@ class Database:
 				parameters[param] = self.build_query[param]
 
 		# reset path and build_query for next query
-		request_ref = '{0}{1}.json?{2}'.format(self.database_url, self.path, urlencode(parameters))
+		request_ref = '{0}{1}.json?{2}'.format(database_url, path, urlencode(parameters))
 
 		self.path = ""
 		self.build_query = {}
@@ -343,6 +352,8 @@ class Database:
 
 			access_token = self.credentials.token
 			headers['Authorization'] = 'Bearer ' + access_token
+		elif self.auth:
+			headers['Authorization'] = 'Bearer ' + self.auth.user['idToken']
 
 		return headers
 
@@ -580,9 +591,9 @@ class Database:
 		return request_object.json()
 
 	def stream(self, stream_handler, token=None, stream_id=None, is_async=True):
-		request_ref = self.build_request_url(token)
-
-		return Stream(request_ref, stream_handler, self.build_headers, stream_id, is_async)
+		# request_ref = self.build_request_url(token)
+		url_builder = partial(self.build_request_url, override_path=self.path, override_db_url=self.database_url)
+		return Stream(url_builder, stream_handler, self.build_headers, stream_id, is_async, self.auth)
 
 	def check_token(self, database_url, path, token):
 		""" Builds Request URL to write/update/remove data.
@@ -605,6 +616,8 @@ class Database:
 
 		if token:
 			return '{0}{1}.json?auth={2}'.format(database_url, path, token)
+		elif self.auth:
+			return '{0}{1}.json?auth={2}'.format(database_url, path, self.auth.user['idToken'])
 		else:
 			return '{0}{1}.json'.format(database_url, path)
 

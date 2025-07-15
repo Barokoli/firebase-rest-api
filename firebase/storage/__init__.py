@@ -13,10 +13,16 @@ A simple python wrapper for Google's `Firebase Cloud Storage REST API`_
 """
 
 import datetime
+
+import requests.exceptions
 from google.cloud import storage
 from urllib.parse import quote
 
+from firebase import Auth
 from firebase._exception import raise_detailed_error
+import logging
+
+logger = logging.getLogger("Firebase")
 
 
 class Storage:
@@ -34,18 +40,19 @@ class Storage:
 		configuration.
 	"""
 
-	def __init__(self, credentials, requests, storage_bucket):
+	def __init__(self, auth: Auth, requests, storage_bucket):
 		""" Constructor """
 
-		self.credentials = credentials
+		self.credentials = None
+		self.auth = auth
 		self.requests = requests
 		self.storage_bucket = "https://firebasestorage.googleapis.com/v0/b/" + storage_bucket
 
 		self.path = ""
 
-		if credentials:
-			client = storage.Client(credentials=credentials, project=storage_bucket)
-			self.bucket = client.get_bucket(storage_bucket)
+		# if credentials:
+		# 	client = storage.Client(credentials=credentials, project=storage_bucket)
+		# 	self.bucket = client.get_bucket(storage_bucket)
 
 	def child(self, *args):
 		""" Build paths to your storage.
@@ -108,6 +115,8 @@ class Storage:
 
 		request_ref = self.storage_bucket + "/o?name={0}".format(path)
 
+		token = token or self.auth.user['idToken']
+
 		if token:
 			headers = {"Authorization": "Firebase " + token}
 			request_object = self.requests.post(request_ref, headers=headers, data=file_object)
@@ -158,6 +167,8 @@ class Storage:
 		if path.startswith('/'):
 			path = path[1:]
 
+		token = token or self.auth.user['idToken']
+
 		if self.credentials:
 			self.bucket.delete_blob(path)
 		else:
@@ -193,6 +204,8 @@ class Storage:
 			to :data:`None`.
 		"""
 
+		token = token or self.auth.user['idToken']
+
 		if self.credentials:
 
 			# reset path
@@ -208,14 +221,19 @@ class Storage:
 				blob.download_to_filename(filename)
 
 		elif token:
-			headers = {"Authorization": "Firebase " + token}
-			r = self.requests.get(self.get_url(token), stream=True, headers=headers)
+			for r in range(0, 10):
+				try:
+					headers = {"Authorization": "Firebase " + token}
+					r = self.requests.get(self.get_url(token), stream=True, headers=headers)
 
-			if r.status_code == 200:
-				with open(filename, 'wb') as f:
-					for chunk in r:
-						f.write(chunk)
-
+					if r.status_code == 200:
+						with open(filename, 'wb') as f:
+							for chunk in r:
+								f.write(chunk)
+				except (requests.exceptions.ChunkedEncodingError, requests.exceptions.Timeout) as e:
+					logger.info(f"Failed download ({e}). Retrying {r}")
+					continue
+				break
 		else:
 			r = self.requests.get(self.get_url(token), stream=True)
 
@@ -248,6 +266,8 @@ class Storage:
 		# remove leading backlash
 		if path.startswith('/'):
 			path = path[1:]
+
+		token = token or self.auth.user['idToken']
 
 		if self.credentials:
 			blob = self.bucket.get_blob(path)

@@ -7,20 +7,20 @@
 # --------------------------------------------------------------------------------------
 
 
-from sseclient import SSEClient
+import socket
+import time
+
+from ._custom_sse_client import SSEClient
 
 
 class ClosableSSEClient(SSEClient):
 
-	def __init__(self, *args, build_headers, **kwargs):
-		self.build_headers = build_headers
+	def __init__(self, *args, **kwargs):
 		self.should_connect = True
-
 		super(ClosableSSEClient, self).__init__(*args, **kwargs)
 
 	def _connect(self):
 		if self.should_connect:
-			self.requests_kwargs['headers'].update(self.build_headers())
 			super(ClosableSSEClient, self)._connect()
 		else:
 			raise StopIteration()
@@ -28,4 +28,17 @@ class ClosableSSEClient(SSEClient):
 	def close(self):
 		self.should_connect = False
 		self.retry = 0
+
+		for r in range(0, 8):
+			if self.resp is not None:
+				break
+			time.sleep(0.2)
+
+		if self.resp is None:
+			return
+
+		# if hasattr(self.resp.raw, '_fp'):
+		# 	self.resp.raw._fp.fp.raw._sock.shutdown(socket.SHUT_RDWR)
+		# 	self.resp.raw._fp.fp.raw._sock.close()
+		# else:
 		self.resp.close()
